@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Frameline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet">
+<style>
+  /* Layout: black camera with a big numeric counter, a gallery that slides up over it as a tight full-bleed grid,
+     an inverted export panel, and one curtain-style preloader. */
+  :root {
+    --bg: #eeeff1;
+    --ink: #0b0b0c;
+    --mute: #787b83;
+    --line: #d8dade;
+    --sk-a: #e2e3e6;
+    --sk-b: #ebecee;
+    --danger: #d6342c;
+
+    --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --text: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ease: cubic-bezier(.7, 0, .2, 1);
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0a0b;
+      --ink: #f3f3f4;
+      --mute: #86898f;
+      --line: #232428;
+      --sk-a: #17181b;
+      --sk-b: #1f2023;
+      --danger: #ff6f67;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; overscroll-behavior: none; }
+  body { font-family: var(--text); font-size: 15px; line-height: 1.4; color: #fff; -webkit-font-smoothing: antialiased; touch-action: manipulation; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  svg { display: block; flex: none; }
+  :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+  .num { font-family: var(--display); font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+
+  .glass { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.12); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform .15s, opacity .2s; }
+  .glass:active { transform: scale(.92); }
+  .glass[disabled] { opacity: .3; pointer-events: none; }
+  .glass svg { width: 20px; height: 20px; }
+
+  /* ---------- Camera ---------- */
+  #cam { position: fixed; inset: 0; background: #000; display: flex; flex-direction: column; padding-top: var(--safe-t); padding-bottom: var(--safe-b); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+  .ctop { flex: none; height: 92px; padding: 14px 20px 0; display: flex; justify-content: space-between; align-items: flex-start; }
+  .counter { display: grid; gap: 6px; }
+  .counter .n { font-size: 46px; line-height: .9; font-weight: 300; }
+  .counter .n .z { opacity: .26; }
+  .csub { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,.62); min-height: 20px; }
+  .csub .pulse { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: pulse .9s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .2; } }
+  .csub button.cancel { display: inline-flex; align-items: center; gap: 6px; color: #fff; }
+  .csub button.cancel svg { width: 12px; height: 12px; }
+  .vfwrap { flex: 1; min-height: 0; display: grid; place-items: center; container-type: size; }
+  .vf { position: relative; width: min(100cqw, 75cqh); aspect-ratio: 3 / 4; overflow: hidden; background: #0b0b0b; }
+  .vf video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .vf video.mirror { transform: scaleX(-1); }
+  .corner { position: absolute; width: 18px; height: 18px; border: 0 solid rgba(255,255,255,.6); pointer-events: none; opacity: 0; transition: opacity .4s; }
+  .live .corner { opacity: 1; }
+  .corner.a { top: 14px; left: 14px; border-top-width: 1.5px; border-left-width: 1.5px; }
+  .corner.b { top: 14px; right: 14px; border-top-width: 1.5px; border-right-width: 1.5px; }
+  .corner.c { bottom: 14px; left: 14px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+  .corner.d { bottom: 14px; right: 14px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  .flash.go { animation: flash .32s ease-out; }
+  @keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
+  .count { position: absolute; inset: 0; display: none; place-items: center; pointer-events: none; font-size: 132px; font-weight: 200; text-shadow: 0 6px 40px rgba(0,0,0,.45); }
+  .count.on { display: grid; }
+  .count.tick { animation: tick .9s ease-out; }
+  @keyframes tick { 0% { transform: scale(1.2); opacity: 0; } 25% { opacity: 1; } 100% { transform: scale(1); opacity: .85; } }
+  .cycle { position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: rgba(255,255,255,.18); display: none; }
+  .cycle i { display: block; height: 100%; width: 0; background: #fff; }
+  .cycle.on { display: block; }
+  .cycle.on i { animation: fill var(--dur, 3s) linear forwards; }
+  @keyframes fill { to { width: 100%; } }
+  .vtoast { position: absolute; left: 50%; bottom: 22px; transform: translate(-50%, 8px); opacity: 0; pointer-events: none; display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 999px; background: rgba(12,12,14,.72); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); font-size: 14px; font-weight: 500; white-space: nowrap; transition: opacity .2s, transform .2s; }
+  .vtoast.show { opacity: 1; transform: translate(-50%, 0); }
+  .vtoast svg { width: 14px; height: 14px; }
+  .warn { position: absolute; z-index: 4; left: 16px; right: 16px; top: calc(var(--safe-t) + 92px); display: none; gap: 12px; align-items: flex-start; padding: 12px 14px; background: #fff; color: #000; font-size: 14px; }
+  .warn.on { display: flex; }
+  .warn span { flex: 1; }
+  .warn button { font-weight: 600; }
+
+  .cbot { flex: none; height: 132px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 22px; }
+  .rollbtn { justify-self: start; position: relative; width: 58px; height: 58px; overflow: hidden; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); display: grid; place-items: center; }
+  .rollbtn img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+  .rollbtn.has img { display: block; }
+  .rollbtn svg { width: 20px; height: 20px; opacity: .7; }
+  .rollbtn.has svg { display: none; }
+  .shutter { width: 86px; height: 86px; border-radius: 50%; border: 3px solid #fff; display: grid; place-items: center; transition: transform .12s; }
+  .shutter span { width: 68px; height: 68px; border-radius: 50%; background: #fff; transition: transform .14s, border-radius .2s; }
+  .shutter:active span { transform: scale(.86); }
+  .shutter[disabled] { opacity: .28; pointer-events: none; }
+  .shutter.running span { border-radius: 14px; transform: scale(.46); }
+  .mode { justify-self: end; height: 40px; padding: 0 16px; border-radius: 999px; background: rgba(255,255,255,.12); font-size: 14px; font-weight: 500; min-width: 88px; text-align: center; transition: transform .12s; }
+  .mode:active { transform: scale(.95); }
+  .mode.auto { background: #fff; color: #000; }
+
+  .gate { position: absolute; z-index: 3; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 28px 24px 32px; background: #000; }
+  .live .gate { display: none; }
+  .gate h1 { margin: 0; font-family: var(--display); font-weight: 300; font-size: clamp(40px, 13vw, 58px); line-height: .98; letter-spacing: -.045em; text-wrap: balance; }
+  .gate p { margin: 0; color: rgba(255,255,255,.62); max-width: 34ch; text-wrap: pretty; }
+  .gate p.err { color: #ffb4ae; }
+  .gate .acts { display: grid; gap: 10px; margin-top: 10px; }
+  .pill { display: inline-flex; align-items: center; justify-content: center; height: 54px; border-radius: 999px; padding: 0 28px; background: #fff; color: #000; font-weight: 600; font-size: 16px; transition: transform .12s; }
+  .pill:active { transform: scale(.98); }
+  .pill.ghost { background: rgba(255,255,255,.12); color: #fff; font-weight: 500; }
+
+  /* ---------- Gallery ---------- */
+  #gal { position: fixed; inset: 0; z-index: 10; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; transform: translateY(100%); visibility: hidden; transition: transform .6s var(--ease), visibility 0s .6s; }
+  #gal.open { transform: none; visibility: visible; transition: transform .6s var(--ease), visibility 0s 0s; }
+  .gbar { flex: none; display: flex; align-items: center; justify-content: space-between; padding: calc(var(--safe-t) + 10px) 16px 10px; }
+  .gbtn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px; border-radius: 999px; font-weight: 500; border: 1px solid var(--line); transition: transform .12s; }
+  .gbtn:active { transform: scale(.96); }
+  .gbtn.solid { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 600; }
+  .gbtn[disabled] { opacity: .3; pointer-events: none; }
+  .gbtn svg { width: 18px; height: 18px; }
+  .gscroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-bottom: var(--safe-b); }
+  .hero { padding: 10px 20px 26px; }
+  .hnum { display: flex; align-items: baseline; gap: 12px; }
+  .hnum .n { font-size: clamp(96px, 34vw, 210px); line-height: .8; font-weight: 200; letter-spacing: -.06em; }
+  .hnum .l { font-size: 15px; color: var(--mute); }
+  .hmeta { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: 22px; font-size: 14px; }
+  .hmeta span:last-child { color: var(--mute); }
+  .bar { height: 3px; background: var(--line); margin-top: 16px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--ink); transition: width .8s var(--ease); }
+  .hstore { margin: 8px 0 0; font-size: 12.5px; color: var(--mute); }
+  .gsizer { position: relative; }
+  .cell { position: absolute; left: 0; top: 0; padding: 0; overflow: hidden; background: linear-gradient(100deg, var(--sk-a) 30%, var(--sk-b) 50%, var(--sk-a) 70%); background-size: 300% 100%; animation: shimmer 1.4s linear infinite; contain: strict; }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  .cell img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .35s; }
+  .cell.ld { animation: none; background: var(--sk-a); }
+  .cell.ld img { opacity: 1; }
+  .cell b { position: absolute; left: 7px; bottom: 6px; font-size: 11px; font-weight: 500; color: #fff; text-shadow: 0 1px 8px rgba(0,0,0,.65); font-variant-numeric: tabular-nums; }
+  .gempty { display: none; padding: 40px 20px 60px; color: var(--mute); }
+  .gempty.on { display: block; }
+  .gfoot { padding: 28px 20px 40px; display: flex; justify-content: center; }
+  .gfoot button { color: var(--danger); font-weight: 500; height: 44px; padding: 0 12px; }
+
+  /* ---------- Viewer ---------- */
+  .viewer { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; display: flex; flex-direction: column; opacity: 0; visibility: hidden; transition: opacity .25s, visibility 0s .25s; padding-top: var(--safe-t); padding-bottom: var(--safe-b); }
+  .viewer.open { opacity: 1; visibility: visible; transition: opacity .25s, visibility 0s 0s; }
+  .vtop { flex: none; height: 64px; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; padding: 0 16px; }
+  .vtitle { text-align: center; display: grid; }
+  .vtitle b { font-family: var(--display); font-weight: 500; font-size: 18px; letter-spacing: -.02em; }
+  .vtitle span { font-size: 12.5px; color: rgba(255,255,255,.55); font-variant-numeric: tabular-nums; }
+  .vstage { flex: 1; min-height: 0; display: grid; place-items: center; touch-action: pan-y; padding: 0 0; }
+  .vstage img { max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
+  .vstage img.soft { filter: blur(6px); }
+  .vprog { height: 2px; background: transparent; margin: 0 16px; overflow: hidden; }
+  .vprog i { display: block; height: 100%; width: 0; background: #fff; }
+  .vprog.on i { animation: indet 1s ease-in-out infinite; width: 40%; }
+  @keyframes indet { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+  .vbar { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px 16px 18px; }
+  .vbar button { height: 54px; border-radius: 999px; background: rgba(255,255,255,.12); font-weight: 600; font-size: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+  .vbar button.del { color: #ff9a93; }
+  .vbar button.armed { background: #ff453a; color: #fff; }
+  .vbar svg { width: 18px; height: 18px; }
+
+  /* ---------- Inverted panels (export, confirm) ---------- */
+  .scrim { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.5); opacity: 0; visibility: hidden; transition: opacity .3s, visibility 0s .3s; }
+  .scrim.open { opacity: 1; visibility: visible; transition: opacity .3s, visibility 0s 0s; }
+  .panel { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 88%; display: flex; flex-direction: column; background: var(--ink); color: var(--bg); transform: translateY(102%); visibility: hidden; transition: transform .5s var(--ease), visibility 0s .5s; padding-bottom: var(--safe-b); }
+  .panel.open { transform: none; visibility: visible; transition: transform .5s var(--ease), visibility 0s 0s; }
+  .panel-in { width: min(100%, 640px); margin: 0 auto; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .phead { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 20px 6px; }
+  .phead h2 { margin: 0; font-family: var(--display); font-weight: 300; font-size: 44px; line-height: .95; letter-spacing: -.045em; }
+  .pclose { width: 40px; height: 40px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--bg) 30%, transparent); display: grid; place-items: center; flex: none; }
+  .pclose svg { width: 14px; height: 14px; }
+  .pdesc { margin: 8px 20px 18px; font-size: 14px; opacity: .65; max-width: 44ch; text-wrap: pretty; }
+  .parts { overflow-y: auto; min-height: 0; border-top: 1px solid color-mix(in srgb, var(--bg) 18%, transparent); }
+  .part { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid color-mix(in srgb, var(--bg) 18%, transparent); }
+  .part h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 22px; letter-spacing: -.03em; }
+  .part p { margin: 2px 0 0; font-size: 13px; opacity: .6; font-variant-numeric: tabular-nums; }
+  .part .go { min-width: 116px; height: 44px; padding: 0 18px; border-radius: 999px; background: var(--bg); color: var(--ink); font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .part .go[disabled] { opacity: .55; pointer-events: none; }
+  .part .go.done { background: transparent; color: var(--bg); border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent); }
+  .part .pb { position: absolute; left: 0; bottom: -1px; height: 3px; width: 0; background: var(--bg); transition: width .2s linear; }
+  .pnote { margin: 0; padding: 16px 20px 22px; font-size: 12.5px; opacity: .55; text-wrap: pretty; }
+  .cfm { padding: 22px 20px 24px; display: grid; gap: 12px; }
+  .cfm h2 { margin: 0; font-family: var(--display); font-weight: 300; font-size: 34px; line-height: 1; letter-spacing: -.04em; text-wrap: balance; }
+  .cfm p { margin: 0; opacity: .7; font-size: 14.5px; text-wrap: pretty; }
+  .cfm .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+  .cfm .row button { height: 54px; border-radius: 999px; font-weight: 600; font-size: 16px; border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent); }
+  .cfm .row button.danger { background: #ff453a; border-color: #ff453a; color: #fff; }
+
+  /* ---------- Preloader ---------- */
+  #pre { position: fixed; inset: 0; z-index: 100; background: #000; color: #fff; display: flex; flex-direction: column; justify-content: space-between; padding: calc(var(--safe-t) + 22px) 22px calc(var(--safe-b) + 22px); transition: transform .9s var(--ease); }
+  #pre.done { transform: translateY(-100%); pointer-events: none; }
+  #pre .brand { font-family: var(--display); font-weight: 500; font-size: 20px; letter-spacing: -.03em; }
+  #pre .big { font-size: clamp(110px, 38vw, 260px); line-height: .78; font-weight: 200; letter-spacing: -.06em; }
+  #pre .meta { display: flex; justify-content: space-between; font-size: 13px; color: rgba(255,255,255,.55); margin-top: 18px; }
+  #pre .line { height: 2px; background: rgba(255,255,255,.16); margin-top: 12px; }
+  #pre .line i { display: block; height: 100%; width: 0; background: #fff; }
+
+  @media (orientation: landscape) and (max-height: 520px) {
+    .cbot { height: 100px; } .shutter { width: 68px; height: 68px; } .shutter span { width: 52px; height: 52px; }
+    .ctop { height: 70px; } .counter .n { font-size: 34px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+
+<!-- Camera -->
+<main id="cam">
+  <div class="ctop">
+    <div class="counter">
+      <div class="n num" id="cnum">0000</div>
+      <div class="csub" id="csub">saved</div>
+    </div>
+    <button class="glass" id="flipBtn" disabled aria-label="Switch camera">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg>
+    </button>
+  </div>
+
+  <div class="warn" id="warn" role="alert"><span id="warnText"></span><button id="warnX">Dismiss</button></div>
+
+  <div class="vfwrap">
+    <div class="vf" id="vf">
+      <video id="video" playsinline muted autoplay></video>
+      <i class="corner a"></i><i class="corner b"></i><i class="corner c"></i><i class="corner d"></i>
+      <div class="count num" id="count"></div>
+      <div class="flash" id="flash"></div>
+      <div class="cycle" id="cycle"><i></i></div>
+      <div class="vtoast" id="vtoast">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+        <span id="vtoastText"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cbot">
+    <button class="rollbtn" id="rollBtn" aria-label="Open roll">
+      <img id="lastImg" alt="">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18"/><path d="M3 15l5-5 5 5 3-3 5 5"/></svg>
+    </button>
+    <button class="shutter" id="shutter" disabled aria-label="Take photo"><span></span></button>
+    <button class="mode" id="modeBtn" aria-label="Capture mode">Manual</button>
+  </div>
+
+  <div class="gate" id="gate">
+    <h1 id="gateH">Shoot a numbered sequence.</h1>
+    <p id="gateP">Each photo saves to this device the moment you take it, as 1.jpg, 2.jpg, 3.jpg and so on.</p>
+    <p class="err" id="gateErr" hidden></p>
+    <div class="acts">
+      <button class="pill" id="startBtn">Start camera</button>
+      <button class="pill ghost" id="gateRoll" hidden>Open roll</button>
+      <label class="pill ghost" id="fallbackLabel" hidden>Use phone camera app
+        <input id="fallbackInput" type="file" accept="image/*" capture="environment" hidden>
+      </label>
+    </div>
+  </div>
+</main>
+
+<!-- Gallery -->
+<section id="gal" aria-label="Roll" aria-hidden="true">
+  <div class="gbar">
+    <button class="gbtn" id="gBack">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>Camera
+    </button>
+    <button class="gbtn solid" id="gExport" disabled>Export</button>
+  </div>
+  <div class="gscroll" id="gscroll">
+    <div class="hero">
+      <div class="hnum"><span class="n num" id="gnum">0</span><span class="l" id="glab">photos</span></div>
+      <div class="hmeta"><span id="gsize"></span><span id="gexp"></span></div>
+      <div class="bar"><i id="gbar"></i></div>
+      <p class="hstore" id="gstore"></p>
+    </div>
+    <div class="gsizer" id="gsizer"></div>
+    <div class="gempty" id="gempty">No photos yet. Go back and press the shutter.</div>
+    <div class="gfoot"><button id="delAll" hidden>Delete all photos</button></div>
+  </div>
+</section>
+
+<!-- Viewer -->
+<div class="viewer" id="viewer" role="dialog" aria-label="Photo" aria-hidden="true">
+  <div class="vtop">
+    <button class="glass" id="vClose" aria-label="Close photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="vtitle"><b id="vname"></b><span id="vpos"></span></div>
+    <span></span>
+  </div>
+  <div class="vstage" id="vstage"><img id="vimg" alt=""></div>
+  <div class="vprog" id="vprog"><i></i></div>
+  <div class="vbar">
+    <button id="vRetake"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>Retake</button>
+    <button class="del" id="vDelete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span id="vDelText">Delete</span></button>
+  </div>
+</div>
+
+<!-- Export + confirm -->
+<div class="scrim" id="scrim"></div>
+<section class="panel" id="exp" aria-label="Export" aria-hidden="true">
+  <div class="panel-in">
+    <div class="phead"><h2>Export</h2><button class="pclose" id="expClose" aria-label="Close export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <p class="pdesc" id="expDesc"></p>
+    <div class="parts" id="parts"></div>
+    <p class="pnote" id="expNote">Files inside each ZIP keep their real numbers, so extracting every part into one folder gives you 1.jpg to the last photo.</p>
+  </div>
+</section>
+<section class="panel" id="cfm" role="alertdialog" aria-label="Confirm" aria-hidden="true">
+  <div class="panel-in"><div class="cfm">
+    <h2 id="cfmH"></h2><p id="cfmP"></p>
+    <div class="row"><button id="cfmNo">Cancel</button><button class="danger" id="cfmYes">Delete</button></div>
+  </div></div>
+</section>
+
+<!-- Preloader -->
+<div id="pre" aria-live="polite">
+  <div class="brand">Frameline</div>
+  <div>
+    <div class="big num" id="preN">000</div>
+    <div class="meta"><span id="preT">Opening your roll</span><span>Saved on this device</span></div>
+    <div class="line"><i id="preBar"></i></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const QUALITY = 0.8, MAX_EDGE = 2048, THUMB_EDGE = 360, THUMB_Q = 0.72;
+  const PART_BYTES = 90 * 1048576, PART_FILES = 300, GAP = 2, MAX_PENDING = 3;
+  const MODES = [{ label: "Manual", s: 0 }, { label: "Auto 2s", s: 2 }, { label: "Auto 3s", s: 3 }, { label: "Auto 5s", s: 5 }];
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fmt = (n) => n < 1048576 ? Math.max(1, Math.round(n / 1024)) + " KB" : n < 1073741824 ? (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB" : (n / 1073741824).toFixed(1) + " GB";
+
+  const video = $("video"), vf = $("vf"), cam = $("cam");
+  const S = { items: [], byId: new Map(), nextId: 1, stream: null, facing: "environment", mode: 0, running: false, timer: null, wake: null,
+              retakeId: null, retakeReturn: false, pending: 0, q: Promise.resolve(), saved: 0, quota: 0, usage: 0, toastT: null, tick: 0 };
+  let store = null;
+
+  /* =========================================================
+     Storage: IndexedDB, with an in-memory fallback
+     meta  store: {id,size,w,h,t,thumb:Blob,exp}   (loaded at start, small)
+     full  store: id -> Blob                       (read only when needed)
+     ========================================================= */
+  function idbStore(db) {
+    const run = (stores, mode, fn) => new Promise((res, rej) => {
+      const t = db.transaction(stores, mode);
+      t.oncomplete = () => res();
+      t.onabort = () => rej(t.error || new Error("Storage write failed"));
+      t.onerror = () => rej(t.error || new Error("Storage write failed"));
+      fn(t);
+    });
+    return {
+      persistent: true,
+      loadMeta(onProg) {
+        return new Promise((res, rej) => {
+          const os = db.transaction("meta").objectStore("meta");
+          const cq = os.count(); let total = 0;
+          cq.onsuccess = () => { total = cq.result; };
+          const out = [], q = os.openCursor();
+          q.onsuccess = () => { const c = q.result; if (c) { out.push(c.value); onProg(out.length, total); c.continue(); } else res(out); };
+          q.onerror = () => rej(q.error);
+        });
+      },
+      put(rec, blob) { return run(["meta", "full"], "readwrite", (t) => { t.objectStore("meta").put(rec); t.objectStore("full").put(blob, rec.id); }); },
+      getFull(id) { return new Promise((res, rej) => { const q = db.transaction("full").objectStore("full").get(id); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+      remove(ids) { return run(["meta", "full"], "readwrite", (t) => { ids.forEach((id) => { t.objectStore("meta").delete(id); t.objectStore("full").delete(id); }); }); },
+      markExported(recs) { return run(["meta"], "readwrite", (t) => { const s = t.objectStore("meta"); recs.forEach((r) => s.put(r)); }); },
+      clear() { return run(["meta", "full"], "readwrite", (t) => { t.objectStore("meta").clear(); t.objectStore("full").clear(); }); }
+    };
+  }
+  function memStore() {
+    const m = new Map(), f = new Map();
+    return { persistent: false, async loadMeta() { return []; }, async put(r, b) { m.set(r.id, r); f.set(r.id, b); }, async getFull(id) { return f.get(id); },
+             async remove(ids) { ids.forEach((i) => { m.delete(i); f.delete(i); }); }, async markExported() {}, async clear() { m.clear(); f.clear(); } };
+  }
+  function openDB() {
+    return new Promise((res, rej) => {
+      if (!window.indexedDB) return rej(new Error("no idb"));
+      const r = indexedDB.open("frameline", 1);
+      r.onupgradeneeded = () => { const d = r.result; d.createObjectStore("meta", { keyPath: "id" }); d.createObjectStore("full"); };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+      r.onblocked = () => rej(new Error("blocked"));
+    });
+  }
+  const rec = (it) => ({ id: it.id, size: it.size, w: it.w, h: it.h, t: it.t, thumb: it.thumb, exp: it.exp });
+  const thumbURL = (it) => it.url || (it.url = URL.createObjectURL(it.thumb));
+
+  /* =========================================================
+     History-backed layers so the phone's Back button closes them
+     ========================================================= */
+  const layers = [];
+  function pushLayer(name, close) { layers.push({ name, close }); try { history.pushState({ d: layers.length }, ""); } catch (e) {} }
+  function closeToDepth(d) { const delta = d - layers.length; if (delta < 0) { try { history.go(delta); } catch (e) { while (layers.length > d) layers.pop().close(); } } }
+  window.addEventListener("popstate", () => { const d = (history.state && history.state.d) || 0; while (layers.length > d) layers.pop().close(); });
+  const topIs = (n) => layers.length && layers[layers.length - 1].name === n;
+  const hasLayer = (n) => layers.some((l) => l.name === n);
+
+  /* =========================================================
+     Preloader
+     ========================================================= */
+  const pre = { shown: 0, target: 0, raf: 0 };
+  function preLoop() {
+    pre.shown += (pre.target - pre.shown) * 0.12 + 0.15;
+    if (pre.shown > pre.target) pre.shown = pre.target;
+    const v = Math.round(pre.shown);
+    $("preN").textContent = String(v).padStart(3, "0");
+    $("preBar").style.width = pre.shown + "%";
+    if (pre.shown < 100) pre.raf = requestAnimationFrame(preLoop);
+  }
+  function preSet(p, text) { pre.target = Math.max(pre.target, p); if (text) $("preT").textContent = text; }
+
+  /* =========================================================
+     Camera
+     ========================================================= */
+  function showGateError(msg) { const g = $("gateErr"); g.textContent = msg; g.hidden = false; }
+  async function startCamera() {
+    $("gateErr").hidden = true;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showGateError("The camera needs a secure page (https). Host this file on an https site, or use your phone camera app.");
+      $("fallbackLabel").hidden = false; return;
+    }
+    try {
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      stopStream();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: S.facing }, width: { ideal: 1440 }, height: { ideal: 1920 } }, audio: false });
+      S.stream = stream; video.srcObject = stream;
+      await video.play().catch(() => {});
+      const f = stream.getVideoTracks()[0].getSettings().facingMode;
+      video.classList.toggle("mirror", f === "user" || (!f && S.facing === "user"));
+      cam.classList.add("live");
+      $("shutter").disabled = false; $("flipBtn").disabled = false;
+    } catch (e) {
+      const denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+      showGateError(denied ? "Camera permission is blocked. Allow camera access in your browser settings, then try again." : "No camera could be started on this device.");
+      $("startBtn").textContent = "Try again"; $("fallbackLabel").hidden = false;
+    }
+  }
+  function stopStream() { if (S.stream) S.stream.getTracks().forEach((t) => t.stop()); S.stream = null; }
+
+  /* ---------- counter / status ---------- */
+  function renderCounter() {
+    const s = String(S.items.length).padStart(4, "0");
+    const lead = Math.min(3, s.match(/^0*/)[0].length);
+    $("cnum").innerHTML = '<span class="z">' + s.slice(0, lead) + "</span>" + s.slice(lead);
+    renderSub();
+    const last = S.items[S.items.length - 1], rb = $("rollBtn");
+    rb.classList.toggle("has", !!last);
+    if (last) $("lastImg").src = thumbURL(last);
+  }
+  function renderSub() {
+    const el = $("csub");
+    if (S.retakeId != null) {
+      const i = S.items.findIndex((x) => x.id === S.retakeId);
+      el.innerHTML = '<button class="cancel" id="cancelRetake" aria-label="Cancel retake">Retaking ' + (i + 1) + '.jpg <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>';
+      $("cancelRetake").onclick = cancelRetake;
+    } else if (S.pending > 0) { el.innerHTML = '<i class="pulse"></i>saving'; }
+    else { el.textContent = store && !store.persistent ? "saved (this session only)" : "saved"; }
+  }
+  function cancelRetake() { S.retakeId = null; S.retakeReturn = false; renderSub(); }
+
+  function toast(text) {
+    $("vtoastText").textContent = text; const t = $("vtoast"); t.classList.add("show");
+    clearTimeout(S.toastT); S.toastT = setTimeout(() => t.classList.remove("show"), 1100);
+  }
+  function warn(text) { $("warnText").textContent = text; $("warn").classList.add("on"); }
+
+  /* ---------- capture + save ---------- */
+  const toBlob = (c, q) => new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("encode failed"))), "image/jpeg", q));
+  function thumbOf(c) {
+    const k = Math.min(1, THUMB_EDGE / Math.max(c.width, c.height)), t = document.createElement("canvas");
+    t.width = Math.max(1, Math.round(c.width * k)); t.height = Math.max(1, Math.round(c.height * k));
+    const x = t.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(c, 0, 0, t.width, t.height); return t;
+  }
+  function capture() {
+    if (!S.stream || !video.videoWidth) return;
+    if (S.pending >= MAX_PENDING) { toast("Saving, one moment"); return; }
+    const vw = video.videoWidth, vh = video.videoHeight, bw = vf.clientWidth, bh = vf.clientHeight;
+    const sc = Math.max(bw / vw, bh / vh), sw = bw / sc, sh = bh / sc, sx = (vw - sw) / 2, sy = (vh - sh) / 2;
+    const k = Math.min(1, MAX_EDGE / Math.max(sw, sh));
+    const c = document.createElement("canvas"); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(video, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    const retake = S.retakeId != null, id = retake ? S.retakeId : S.nextId++, back = retake && S.retakeReturn;
+    S.retakeId = null; S.retakeReturn = false;
+    const fl = $("flash"); fl.classList.remove("go"); void fl.offsetWidth; fl.classList.add("go");
+    try { navigator.vibrate && navigator.vibrate(14); } catch (e) {}
+    S.pending++; renderSub();
+    S.q = S.q.then(() => persist(c, id, retake, back));
+  }
+  async function persist(c, id, retake, back) {
+    try {
+      const blob = await toBlob(c, QUALITY), tb = await toBlob(thumbOf(c), THUMB_Q);
+      const r = { id, size: blob.size, w: c.width, h: c.height, t: Date.now(), thumb: tb, exp: false };
+      await store.put(r, blob);
+      let it = S.byId.get(id);
+      if (it) { if (it.url) URL.revokeObjectURL(it.url); Object.assign(it, r, { url: null }); }
+      else {
+        it = Object.assign({ url: null }, r); S.items.push(it); S.byId.set(id, it);
+        if (S.items.length > 1 && S.items[S.items.length - 2].id > id) S.items.sort((a, b) => a.id - b.id);
+      }
+      S.pending--; S.saved++;
+      renderCounter(); toast((S.items.indexOf(it) + 1) + ".jpg saved");
+      galleryDirty();
+      if (S.saved % 20 === 0) refreshStorage();
+      if (back) { const i = S.items.indexOf(it); openGallery(); openViewer(i); }
+    } catch (e) {
+      S.pending--; renderSub(); stopAuto();
+      warn("A photo could not be saved. Your device storage may be full. Export what you have, then free some space.");
+    }
+  }
+
+  /* ---------- modes ---------- */
+  function setMode(i) {
+    stopAuto(); S.mode = i;
+    const m = $("modeBtn"); m.textContent = MODES[i].label; m.classList.toggle("auto", i > 0);
+  }
+  async function startAuto() {
+    const secs = MODES[S.mode].s; if (!secs) return;
+    S.running = true; $("shutter").classList.add("running"); $("shutter").setAttribute("aria-label", "Stop auto capture");
+    try { if (navigator.wakeLock) S.wake = await navigator.wakeLock.request("screen"); } catch (e) {}
+    let left = secs; cycle(secs); showCount(left);
+    S.timer = setInterval(() => {
+      left--; if (left <= 0) { capture(); left = secs; cycle(secs); } showCount(left);
+    }, 1000);
+  }
+  function stopAuto() {
+    S.running = false; clearInterval(S.timer); S.timer = null;
+    $("count").classList.remove("on"); $("cycle").classList.remove("on");
+    $("shutter").classList.remove("running"); $("shutter").setAttribute("aria-label", "Take photo");
+    try { S.wake && S.wake.release(); } catch (e) {} S.wake = null;
+  }
+  function cycle(secs) { const c = $("cycle"); c.classList.remove("on"); void c.offsetWidth; c.style.setProperty("--dur", secs + "s"); c.classList.add("on"); }
+  function showCount(n) { const c = $("count"); c.textContent = n; c.classList.add("on"); c.classList.remove("tick"); void c.offsetWidth; c.classList.add("tick"); }
+  function onShutter() { if (MODES[S.mode].s) { S.running ? stopAuto() : startAuto(); } else capture(); }
+
+  /* =========================================================
+     Gallery: virtualised grid (renders only what is on screen)
+     ========================================================= */
+  const gscroll = $("gscroll"), gsizer = $("gsizer");
+  const pool = new Map();
+  let cols = 3, cw = 0, ch = 0, rh = 0, rows = 0, galOpen = false, drawQ = 0;
+
+  function glayout() {
+    const w = gscroll.clientWidth || window.innerWidth;
+    cols = w >= 1100 ? 7 : w >= 900 ? 6 : w >= 700 ? 5 : w >= 480 ? 4 : 3;
+    cw = (w - GAP * (cols - 1)) / cols; ch = cw * 4 / 3; rh = ch + GAP;
+    rows = Math.ceil(S.items.length / cols);
+    gsizer.style.height = Math.max(0, rows * rh - GAP) + "px";
+    pool.forEach((el) => el.remove()); pool.clear(); gdraw();
+  }
+  function gdraw() {
+    if (!galOpen || !rh) return;
+    const rel = gscroll.scrollTop - gsizer.offsetTop, vh = gscroll.clientHeight;
+    const r0 = Math.max(0, Math.floor(rel / rh) - 2), r1 = Math.min(rows - 1, Math.floor((rel + vh) / rh) + 2);
+    const a = r0 * cols, b = Math.min(S.items.length, (r1 + 1) * cols);
+    pool.forEach((el, i) => { if (i < a || i >= b) { el.remove(); pool.delete(i); } });
+    const frag = document.createDocumentFragment();
+    for (let i = a; i < b; i++) {
+      if (pool.has(i)) continue;
+      const it = S.items[i], col = i % cols, row = (i / cols) | 0;
+      const el = document.createElement("button");
+      el.className = "cell"; el.dataset.i = i; el.setAttribute("aria-label", "Open " + (i + 1) + ".jpg");
+      el.style.cssText = "width:" + cw + "px;height:" + ch + "px;transform:translate3d(" + col * (cw + GAP) + "px," + row * rh + "px,0)";
+      const img = new Image(); img.alt = ""; img.decoding = "async"; img.onload = () => el.classList.add("ld"); img.src = thumbURL(it);
+      const lab = document.createElement("b"); lab.textContent = i + 1;
+      el.append(img, lab); frag.append(el); pool.set(i, el);
+    }
+    gsizer.append(frag);
+  }
+  gscroll.addEventListener("scroll", () => { if (drawQ) return; drawQ = requestAnimationFrame(() => { drawQ = 0; gdraw(); }); }, { passive: true });
+  gsizer.addEventListener("click", (e) => { const c = e.target.closest(".cell"); if (c) openViewer(+c.dataset.i); });
+  new ResizeObserver(() => { if (galOpen) glayout(); }).observe(gscroll);
+
+  function renderHero() {
+    const n = S.items.length, total = S.items.reduce((s, x) => s + x.size, 0), exp = S.items.reduce((s, x) => s + (x.exp ? 1 : 0), 0);
+    $("gnum").textContent = n; $("glab").textContent = n === 1 ? "photo" : "photos";
+    $("gsize").textContent = fmt(total) + " on this device";
+    $("gexp").textContent = !n ? "" : exp === n ? "All exported" : (n - exp) + " not exported yet";
+    $("gempty").classList.toggle("on", n === 0); $("delAll").hidden = n === 0; $("gExport").disabled = n === 0;
+    renderStorage(total);
+  }
+  function renderStorage(total) {
+    if (total == null) total = S.items.reduce((s, x) => s + x.size, 0);
+    const q = S.quota;
+    $("gbar").style.width = q ? Math.max(total ? 1 : 0, Math.min(100, (S.usage / q) * 100)) + "%" : "0%";
+    $("gstore").textContent = q ? "Device storage: " + fmt(S.usage) + " used of " + fmt(q) + " available to this site" : (store && !store.persistent ? "Photos are held in memory only in this browser mode. Export before closing." : "");
+  }
+  async function refreshStorage() {
+    try { const e = await navigator.storage.estimate(); S.quota = e.quota || 0; S.usage = e.usage || 0; } catch (e) {}
+    if (galOpen) renderStorage();
+    if (S.quota && S.quota - S.usage < 200 * 1048576) warn("Storage is almost full. Export your photos soon.");
+  }
+  function galleryDirty() { renderHero(); if (galOpen) glayout(); }
+
+  function openGallery() {
+    if (galOpen) return; stopAuto(); galOpen = true;
+    $("gal").classList.add("open"); $("gal").setAttribute("aria-hidden", "false");
+    renderHero(); glayout(); refreshStorage();
+    pushLayer("gal", () => { galOpen = false; $("gal").classList.remove("open"); $("gal").setAttribute("aria-hidden", "true"); });
+  }
+
+  /* =========================================================
+     Viewer
+     ========================================================= */
+  let vi = -1, vtok = 0, vurl = null, delArmed = 0;
+  const vimg = $("vimg");
+  function openViewer(i) {
+    if (!hasLayer("view")) {
+      $("viewer").classList.add("open"); $("viewer").setAttribute("aria-hidden", "false");
+      pushLayer("view", () => { $("viewer").classList.remove("open"); $("viewer").setAttribute("aria-hidden", "true"); vtok++; vimg.removeAttribute("src"); if (vurl) { URL.revokeObjectURL(vurl); vurl = null; } vi = -1; $("vprog").classList.remove("on"); });
+    }
+    showView(i);
+  }
+  async function showView(i) {
+    vi = i; const it = S.items[i]; if (!it) return;
+    $("vname").textContent = (i + 1) + ".jpg"; $("vpos").textContent = (i + 1) + " of " + S.items.length;
+    resetDelete(); vimg.classList.add("soft"); vimg.src = thumbURL(it);
+    const my = ++vtok; $("vprog").classList.add("on");
+    try {
+      const blob = await store.getFull(it.id); if (my !== vtok || !blob) return;
+      const u = URL.createObjectURL(blob), im = new Image();
+      im.onload = () => { if (my !== vtok) { URL.revokeObjectURL(u); return; } if (vurl) URL.revokeObjectURL(vurl); vurl = u; vimg.src = u; vimg.classList.remove("soft"); $("vprog").classList.remove("on"); };
+      im.onerror = () => { URL.revokeObjectURL(u); $("vprog").classList.remove("on"); };
+      im.src = u;
+    } catch (e) { $("vprog").classList.remove("on"); }
+  }
+  function resetDelete() { delArmed = 0; $("vDelete").classList.remove("armed"); $("vDelText").textContent = "Delete"; }
+  async function deleteCurrent() {
+    if (!delArmed) { delArmed = 1; $("vDelete").classList.add("armed"); $("vDelText").textContent = "Tap again to delete"; setTimeout(resetDelete, 3000); return; }
+    const i = vi, it = S.items[i]; if (!it) return;
+    try { await store.remove([it.id]); } catch (e) { warn("That photo could not be deleted. Try again."); return; }
+    if (it.url) URL.revokeObjectURL(it.url);
+    S.items.splice(i, 1); S.byId.delete(it.id); renderCounter(); galleryDirty();
+    if (!S.items.length) closeToDepth(1); else showView(Math.min(i, S.items.length - 1));
+  }
+  function retakeCurrent() {
+    const it = S.items[vi]; if (!it) return;
+    S.retakeId = it.id; S.retakeReturn = true; renderSub(); closeToDepth(0);
+  }
+  // swipe
+  (function () {
+    const st = $("vstage"); let x0 = null, dx = 0;
+    st.addEventListener("pointerdown", (e) => { x0 = e.clientX; dx = 0; st.setPointerCapture(e.pointerId); vimg.style.transition = "none"; });
+    st.addEventListener("pointermove", (e) => { if (x0 == null) return; dx = e.clientX - x0; vimg.style.transform = "translateX(" + dx * 0.9 + "px)"; vimg.style.opacity = String(1 - Math.min(0.5, Math.abs(dx) / 500)); });
+    const end = () => {
+      if (x0 == null) return; x0 = null; vimg.style.transition = "transform .25s, opacity .25s"; vimg.style.transform = ""; vimg.style.opacity = "";
+      if (dx < -60 && vi < S.items.length - 1) showView(vi + 1); else if (dx > 60 && vi > 0) showView(vi - 1);
+    };
+    st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end);
+  })();
+
+  /* =========================================================
+     Export: split into ZIP parts so phones never run out of memory
+     ========================================================= */
+  let parts = [], expTok = 0, busy = false;
+  function planParts() {
+    const out = []; let cur = null;
+    S.items.forEach((it, i) => {
+      if (!cur || cur.bytes + it.size > PART_BYTES || cur.count >= PART_FILES) { cur = { start: i + 1, end: i + 1, bytes: 0, count: 0, state: "idle", blob: null, ui: null }; out.push(cur); }
+      cur.end = i + 1; cur.bytes += it.size; cur.count++;
+    });
+    out.forEach((p, k) => { p.name = out.length === 1 ? "photos.zip" : "photos-part-" + (k + 1) + "-of-" + out.length + ".zip"; p.n = k + 1; });
+    return out;
+  }
+  function openExport() {
+    if (!S.items.length) return;
+    parts = planParts(); expTok++;
+    const total = S.items.reduce((s, x) => s + x.size, 0);
+    $("expDesc").textContent = S.items.length + " photos, " + fmt(total) + ". " + (parts.length === 1 ? "Everything fits in one ZIP." : "Split into " + parts.length + " ZIP files so your phone can handle them. Create and save each one.");
+    $("expNote").hidden = parts.length === 1;
+    const host = $("parts"); host.innerHTML = "";
+    parts.forEach((p) => {
+      const row = document.createElement("div"); row.className = "part";
+      const info = document.createElement("div");
+      info.innerHTML = "<h3>" + (parts.length === 1 ? "All photos" : "Part " + p.n) + "</h3><p>" + (p.start === p.end ? "Photo " + p.start : "Photos " + p.start + " to " + p.end) + " · " + fmt(p.bytes) + "</p>";
+      const btn = document.createElement("button"); btn.className = "go"; btn.textContent = "Create ZIP";
+      const pb = document.createElement("i"); pb.className = "pb";
+      row.append(info, btn, pb); host.append(row); p.ui = { btn, pb };
+      btn.onclick = () => onPart(p);
+    });
+    $("exp").classList.add("open"); $("exp").setAttribute("aria-hidden", "false"); $("scrim").classList.add("open");
+    pushLayer("exp", () => { expTok++; parts.forEach((p) => (p.blob = null)); $("exp").classList.remove("open"); $("exp").setAttribute("aria-hidden", "true"); if (!hasLayer("cfm")) $("scrim").classList.remove("open"); renderHero(); });
+  }
+  async function onPart(p) {
+    if (busy) return;
+    if (p.state === "ready" || p.state === "saved") return savePart(p);
+    if (typeof JSZip === "undefined") { warn("The ZIP library did not load. Check your connection and reload."); return; }
+    busy = true; const tok = expTok;
+    parts.forEach((o) => { if (o !== p && o.blob) { o.blob = null; o.state = "idle"; o.ui.btn.textContent = "Create ZIP"; o.ui.btn.classList.remove("done"); o.ui.pb.style.width = "0"; } });
+    p.state = "busy"; p.ui.btn.disabled = true; setProg(p, 0);
+    try {
+      const zip = new JSZip(), n = p.end - p.start + 1;
+      for (let i = p.start; i <= p.end; i++) {
+        const it = S.items[i - 1], b = await store.getFull(it.id); if (tok !== expTok) return;
+        zip.file(i + ".jpg", b, { binary: true });
+        if ((i - p.start) % 10 === 0) setProg(p, ((i - p.start + 1) / n) * 25);
+      }
+      const out = await zip.generateAsync({ type: "blob", compression: "STORE", streamFiles: true }, (m) => { if (tok === expTok) setProg(p, 25 + m.percent * 0.75); });
+      if (tok !== expTok) return;
+      p.blob = out; p.state = "ready"; p.ui.pb.style.width = "100%"; p.ui.btn.disabled = false; p.ui.btn.textContent = "Save";
+    } catch (e) {
+      p.state = "idle"; p.ui.btn.disabled = false; p.ui.btn.textContent = "Try again"; p.ui.pb.style.width = "0";
+      warn("Could not create the ZIP. Close other tabs to free memory, then try again.");
+    } finally { busy = false; }
+  }
+  function setProg(p, pct) { p.ui.pb.style.width = pct + "%"; p.ui.btn.textContent = Math.round(pct) + "%"; }
+  async function savePart(p) {
+    const file = new File([p.blob], p.name, { type: "application/zip" });
+    let done = false;
+    if (navigator.canShare && /Android|iPhone|iPad/i.test(navigator.userAgent) && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: p.name }); done = true; } catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    if (!done) {
+      const a = document.createElement("a"); a.href = URL.createObjectURL(p.blob); a.download = p.name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+    }
+    p.state = "saved"; p.ui.btn.textContent = "Saved. Save again"; p.ui.btn.classList.add("done");
+    const changed = []; for (let i = p.start; i <= p.end; i++) { const it = S.items[i - 1]; if (it && !it.exp) { it.exp = true; changed.push(rec(it)); } }
+    if (changed.length) store.markExported(changed).catch(() => {});
+  }
+
+  /* ---------- confirm ---------- */
+  function confirmBox(h, p, yes, onYes) {
+    $("cfmH").textContent = h; $("cfmP").textContent = p; $("cfmYes").textContent = yes;
+    $("cfm").classList.add("open"); $("cfm").setAttribute("aria-hidden", "false"); $("scrim").classList.add("open");
+    $("cfmYes").onclick = () => { closeToDepth(layers.length - 1); onYes(); };
+    $("cfmNo").onclick = () => closeToDepth(layers.length - 1);
+    pushLayer("cfm", () => { $("cfm").classList.remove("open"); $("cfm").setAttribute("aria-hidden", "true"); if (!hasLayer("exp")) $("scrim").classList.remove("open"); });
+  }
+  async function deleteAll() {
+    const ids = S.items.map((x) => x.id);
+    try { await store.clear(); } catch (e) { warn("Could not delete the photos. Try again."); return; }
+    S.items.forEach((it) => it.url && URL.revokeObjectURL(it.url));
+    S.items = []; S.byId.clear(); renderCounter(); galleryDirty(); closeToDepth(0);
+    $("lastImg").removeAttribute("src");
+  }
+
+  /* =========================================================
+     Wiring
+     ========================================================= */
+  $("startBtn").onclick = startCamera;
+  $("gateRoll").onclick = openGallery;
+  $("rollBtn").onclick = openGallery;
+  $("shutter").onclick = onShutter;
+  $("flipBtn").onclick = () => { S.facing = S.facing === "user" ? "environment" : "user"; startCamera(); };
+  $("modeBtn").onclick = () => setMode((S.mode + 1) % MODES.length);
+  $("warnX").onclick = () => $("warn").classList.remove("on");
+  $("gBack").onclick = () => closeToDepth(0);
+  $("gExport").onclick = openExport;
+  $("expClose").onclick = () => closeToDepth(layers.length - 1);
+  $("scrim").onclick = () => closeToDepth(layers.length - 1);
+  $("vClose").onclick = () => closeToDepth(layers.length - 1);
+  $("vRetake").onclick = retakeCurrent;
+  $("vDelete").onclick = deleteCurrent;
+  $("delAll").onclick = () => {
+    const n = S.items.length, un = S.items.filter((x) => !x.exp).length;
+    confirmBox("Delete all " + n + " photos?", un ? un + " of them have not been exported. This cannot be undone." : "They are all exported. This cannot be undone.", "Delete all", deleteAll);
+  };
+  $("fallbackInput").onchange = async (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ""; if (!f) return;
+    try {
+      const bmp = await createImageBitmap(f, { imageOrientation: "from-image" });
+      const k = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas");
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      const id = S.nextId++; S.pending++; renderSub(); S.q = S.q.then(() => persist(c, id, false, false));
+    } catch (er) { warn("That photo could not be read."); }
+  };
+  document.addEventListener("keydown", (e) => {
+    if (hasLayer("view")) { if (e.key === "ArrowRight" && vi < S.items.length - 1) showView(vi + 1); if (e.key === "ArrowLeft" && vi > 0) showView(vi - 1); }
+    if (e.key === "Escape" && layers.length) closeToDepth(layers.length - 1);
+    if (e.code === "Space" && !layers.length && document.activeElement === document.body && !$("shutter").disabled) { e.preventDefault(); onShutter(); }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { if (S.running) stopAuto(); }
+    else if (cam.classList.contains("live")) { const t = S.stream && S.stream.getVideoTracks()[0]; if (!t || t.readyState === "ended") startCamera(); }
+  });
+
+  /* =========================================================
+     Boot
+     ========================================================= */
+  async function boot() {
+    const t0 = performance.now();
+    pre.raf = requestAnimationFrame(preLoop); preSet(8);
+    let items = [];
+    try { const db = await openDB(); store = idbStore(db); preSet(20, "Reading saved photos"); items = await store.loadMeta((i, n) => preSet(20 + (i / Math.max(1, n)) * 65)); }
+    catch (e) { store = memStore(); items = []; }
+    items.sort((a, b) => a.id - b.id);
+    S.items = items.map((r) => Object.assign({ url: null }, r));
+    S.items.forEach((it) => { S.byId.set(it.id, it); S.nextId = Math.max(S.nextId, it.id + 1); });
+    preSet(90, "Checking storage"); await refreshStorage();
+    renderCounter(); renderHero();
+    const n = S.items.length;
+    if (n) {
+      $("gateH").textContent = "Pick up where you left off.";
+      $("gateP").textContent = n + (n === 1 ? " photo is" : " photos are") + " safe on this device. The next one will be " + (n + 1) + ".jpg.";
+      $("startBtn").textContent = "Continue shooting"; $("gateRoll").hidden = false;
+    }
+    if (!store.persistent) { $("gateErr").textContent = "This browser mode cannot keep photos after you close the page. Export before leaving."; $("gateErr").hidden = false; }
+    preSet(100, "Ready");
+    await delay(Math.max(250, 1100 - (performance.now() - t0)));
+    pre.shown = 100; $("preN").textContent = "100"; $("preBar").style.width = "100%";
+    await delay(150); $("pre").classList.add("done");
+    setTimeout(() => { const p = $("pre"); if (p) p.remove(); }, 1200);
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
